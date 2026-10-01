@@ -1,0 +1,8 @@
+# Keep Linux line endings for files executed inside containers, WSL and CI
+*.sh   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.j2   text eol=lf
+Dockerfile text eol=lf
+*.docx binary
+*.png  binary

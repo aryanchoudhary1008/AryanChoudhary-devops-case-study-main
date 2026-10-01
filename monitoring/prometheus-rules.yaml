@@ -1,0 +1,37 @@
+# Alerting rules for the service: availability, error rate and latency SLOs
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: finveritas-api-rules
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: finveritas-api
+      rules:
+        - alert: FinVeritasDown
+          expr: sum(up{job="finveritas-api"}) == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "All FinVeritas API pods are down"
+        - alert: FinVeritasHighErrorRate
+          expr: |
+            sum(rate(flask_http_request_total{job="finveritas-api", status=~"5.."}[5m]))
+              / sum(rate(flask_http_request_total{job="finveritas-api"}[5m])) > 0.05
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "More than 5% of FinVeritas API requests are failing"
+        - alert: FinVeritasHighLatency
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(flask_http_request_duration_seconds_bucket{job="finveritas-api"}[5m])) by (le)) > 0.5
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "FinVeritas API p95 latency is above 500 ms"

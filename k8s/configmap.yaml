@@ -1,0 +1,13 @@
+# Runtime configuration. Change FAULT_RATE / EXTRA_LATENCY_MS and run
+#   kubectl rollout restart deployment/finveritas-api -n finveritas
+# to run a chaos experiment and watch the error-rate and latency panels in Grafana.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: finveritas-config
+  namespace: finveritas
+  labels:
+    app: finveritas-api
+data:
+  FAULT_RATE: "0"
+  EXTRA_LATENCY_MS: "0"

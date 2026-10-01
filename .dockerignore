@@ -1,0 +1,16 @@
+.git
+.github
+.gitignore
+.pytest_cache
+__pycache__
+*.pyc
+.venv
+venv
+tests
+docs
+ansible
+k8s
+monitoring
+scripts
+*.md
+docker-compose.yml

@@ -1,0 +1,25 @@
+# Managed by Ansible - local changes will be overwritten
+[Unit]
+Description=FinVeritas Ratio Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ app_user }}
+Group={{ app_user }}
+WorkingDirectory={{ app_dir }}
+EnvironmentFile={{ config_dir }}/finveritas.env
+ExecStart={{ app_dir }}/venv/bin/gunicorn --bind 0.0.0.0:{{ app_port }} --workers 1 --threads 4 --access-logfile {{ log_dir }}/access.log --error-logfile {{ log_dir }}/error.log app.main:app
+Restart=on-failure
+RestartSec=3
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths={{ log_dir }}
+
+[Install]
+WantedBy=multi-user.target

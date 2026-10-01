@@ -1,0 +1,14 @@
+# Local Kubernetes cluster for the demo:  kind create cluster --config scripts/kind-config.yaml
+# Maps NodePorts to localhost so the API, Prometheus and Grafana are reachable from the browser.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: finveritas
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - containerPort: 30080   # FinVeritas API
+        hostPort: 8080
+      - containerPort: 30090   # Prometheus
+        hostPort: 9090
+      - containerPort: 30300   # Grafana
+        hostPort: 3000

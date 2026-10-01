@@ -1,0 +1,14 @@
+# Prometheus configuration for the local docker-compose stack
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: finveritas-api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["api:5000"]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

@@ -1,0 +1,19 @@
+# Tells Prometheus (via the Prometheus Operator) to scrape /metrics from the FinVeritas service
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: finveritas-api
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames:
+      - finveritas
+  selector:
+    matchLabels:
+      app: finveritas-api
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

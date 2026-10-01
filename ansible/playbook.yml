@@ -1,0 +1,168 @@
+---
+# Configures a Linux host to run the FinVeritas Ratio Service:
+#   1. installs system packages
+#   2. creates a service account and an operator user
+#   3. manages directories, application files, configuration and a systemd unit
+#   4. starts the service and verifies the health endpoint
+- name: Configure FinVeritas runtime environment
+  hosts: appservers
+  become: true
+
+  vars:
+    app_name: finveritas
+    app_user: finveritas
+    ops_user: devops
+    app_dir: /opt/finveritas
+    config_dir: /etc/finveritas
+    log_dir: /var/log/finveritas
+    app_port: 5000
+    app_version: "1.0.0-ansible"
+    fault_rate: "0"
+    extra_latency_ms: "0"
+    system_packages:
+      - python3
+      - python3-venv
+      - python3-pip
+      - curl
+      - git
+      - logrotate
+
+  pre_tasks:
+    - name: Ensure the target is a Debian/Ubuntu system
+      ansible.builtin.assert:
+        that: ansible_facts['os_family'] == "Debian"
+        fail_msg: "This playbook supports Debian/Ubuntu hosts (including WSL Ubuntu)."
+
+  tasks:
+    # ── Packages ────────────────────────────────────────────────────────────
+    - name: Install required system packages
+      ansible.builtin.apt:
+        name: "{{ system_packages }}"
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    # ── Users and groups ────────────────────────────────────────────────────
+    - name: Create application group
+      ansible.builtin.group:
+        name: "{{ app_user }}"
+        system: true
+
+    - name: Create service account (no login shell)
+      ansible.builtin.user:
+        name: "{{ app_user }}"
+        group: "{{ app_user }}"
+        system: true
+        shell: /usr/sbin/nologin
+        home: "{{ app_dir }}"
+        create_home: false
+        comment: "FinVeritas service account"
+
+    - name: Create operator user who can read service logs
+      ansible.builtin.user:
+        name: "{{ ops_user }}"
+        groups: [adm, "{{ app_user }}"]
+        append: true
+        shell: /bin/bash
+        create_home: true
+        comment: "FinVeritas operator"
+
+    # ── Directories and files ───────────────────────────────────────────────
+    - name: Create application, config and log directories
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ item.owner }}"
+        group: "{{ app_user }}"
+        mode: "{{ item.mode }}"
+      loop:
+        - { path: "{{ app_dir }}", owner: root, mode: "0755" }
+        - { path: "{{ config_dir }}", owner: root, mode: "0750" }
+        - { path: "{{ log_dir }}", owner: "{{ app_user }}", mode: "0770" }
+
+    - name: Copy application source code
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../app/"
+        dest: "{{ app_dir }}/app/"
+        owner: root
+        group: "{{ app_user }}"
+        mode: "0644"
+      notify: Restart finveritas
+
+    - name: Copy Python requirements
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../requirements.txt"
+        dest: "{{ app_dir }}/requirements.txt"
+        owner: root
+        group: "{{ app_user }}"
+        mode: "0644"
+
+    - name: Create virtualenv and install Python dependencies
+      ansible.builtin.pip:
+        requirements: "{{ app_dir }}/requirements.txt"
+        virtualenv: "{{ app_dir }}/venv"
+        virtualenv_command: python3 -m venv
+      notify: Restart finveritas
+
+    - name: Write environment file
+      ansible.builtin.template:
+        src: finveritas.env.j2
+        dest: "{{ config_dir }}/finveritas.env"
+        owner: root
+        group: "{{ app_user }}"
+        mode: "0640"
+      notify: Restart finveritas
+
+    - name: Install systemd unit
+      ansible.builtin.template:
+        src: finveritas.service.j2
+        dest: /etc/systemd/system/finveritas.service
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart finveritas
+
+    - name: Rotate application logs daily
+      ansible.builtin.template:
+        src: logrotate.j2
+        dest: /etc/logrotate.d/finveritas
+        owner: root
+        group: root
+        mode: "0644"
+
+    # ── Service ─────────────────────────────────────────────────────────────
+    - name: Enable and start the service
+      ansible.builtin.systemd_service:
+        name: finveritas
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Apply pending restarts before verification
+      ansible.builtin.meta: flush_handlers
+
+    - name: Wait for the service port
+      ansible.builtin.wait_for:
+        port: "{{ app_port }}"
+        host: 127.0.0.1
+        timeout: 30
+
+    - name: Check the health endpoint
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ app_port }}/health"
+        return_content: true
+      register: health
+      retries: 5
+      delay: 2
+      until: health.status == 200
+
+    - name: Show service health
+      ansible.builtin.debug:
+        msg: "FinVeritas is {{ health.json.status }} (version {{ health.json.version }})"
+
+  handlers:
+    - name: Restart finveritas
+      ansible.builtin.systemd_service:
+        name: finveritas
+        state: restarted
+        daemon_reload: true
